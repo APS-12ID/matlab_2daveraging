@@ -1,0 +1,314 @@
+function SAXSWAXSfiletransfer
+disp('You can load saxssetup.mat and waxssetup.mat at any time')
+delete(timerfind);
+ask = input('Do you like to continue? Enter for continue, n for start from beginning :','s');
+if isempty(ask)
+    transfertimer = evalin('base', 'transfertimer');
+else
+    transfertimer.filen = 'files_transfer.tmp';
+    transfertimer.fidPos = -1;
+    transfertimer.setupnotloaded = 0;
+    assignin('base', 'transfertimer', transfertimer);
+    transfertimer
+end
+%transfertimer.baseDir = pth;
+if isfield(transfertimer, 'timer')
+    %stop(transfertimer.timer)
+    delete(transfertimer.timer)
+end
+
+assignin('base', 'setupnotloaded', transfertimer.setupnotloaded);
+
+t=timer('Tag','SAXSLeetimerAzimAvg');
+set(t,'StartDelay', 1,...
+    'TimerFcn', @SAXSLee_12IDB_data_autotransfer,...
+    'StartFcn', @SAXSLee_12IDB_data_autotransfer_start,...
+    'ExecutionMode','fixedRate',...
+    'BusyMode','drop',...
+    'TasksToExecute',inf,...
+    'Period',5);
+%    'StopFcn',  @SAXSLee_12IDB_data_autotransfer_stop,...
+
+transfertimer.timer = t;
+assignin('base', 'transfertimer', transfertimer);
+
+start(t);
+
+%wait(t);
+
+    function SAXSLee_12IDB_data_autotransfer_start(varargin)
+        tm = evalin('base', 'transfertimer');
+        tm = gotorecentdir(tm);
+
+        [tm, isfileOK] = isfiles_transfer(tm);
+        if isfileOK
+            disp('Filetransfer is stared')
+        else
+            disp('check your Files_transfer.tmp')
+            return
+        end
+        assignin('base', 'transfertimer', tm);
+        disp('Starting done')
+    end
+
+
+    function [tm, isfileOK] = isfiles_transfer(tm)
+            
+        epics_put_SAXSinfo
+            
+            fid = fopen(tm.filen);
+            isfileOK = 0;
+            if fid < 0
+                disp('files_transfer.tmp does not exist')
+                stop(tm.timer)
+                return
+            end
+
+            if tm.fidPos ~= -1
+                fseek(fid, tm.fidPos,'bof');  % move fid to end of the last stored scan
+            %    fgetl(fid);      % skip the currentline (head of the last stored scan);
+            end
+
+            while feof(fid) == 0
+                %tempfid = ftell(fid);
+                scanline = fgetl(fid);
+                tt = strfind(scanline, ' ');
+
+
+                try
+                    scanline = scanline(tt(1)+1:tt(2)-1);
+                    disp('OK')
+                catch
+                    scanline = fgetl(fid);
+                    tt = strfind(scanline, ' ');
+                    scanline = scanline(tt(1)+1:tt(2)-1);
+                    disp('not OK')
+                end
+
+
+                %scanline = scanline(tt(1)+1:tt(2)-1);
+                [~,logfn, ~] = fileparts(scanline);
+                switch logfn(1)
+                    case 'S'
+                        dtSfile = ['SAXS/S',deblank(logfn(2:end)), '.tif'];
+                        fidSAXS = fopen(dtSfile);
+                        if (fidSAXS > 0)
+                            %tm.fidPos = tempfid;
+                            fclose(fidSAXS);
+                            isfileOK = 1;
+                        else
+                            break
+                        end
+
+                    case 'W'
+                        dtWfile = ['WAXS/W',deblank(logfn(2:end)), '.tif'];
+                        fidWAXS = fopen(dtWfile);
+                        if (fidWAXS>0)
+                            %tm.fidPos = tempfid;
+                            fclose(fidWAXS);
+                            isfileOK = 1;
+                        else
+                            break
+                        end
+                    otherwise
+                        disp(scanline)
+                        error('Filename of an image is not starting with either S or W')
+                end
+            end
+        fclose(fid);
+
+    end
+
+
+    function SAXSLee_12IDB_data_autotransfer(varargin)
+
+    % check current directory and specfile....
+    
+    
+        transfer = evalin('base', 'transfertimer');
+        %scan.fidPos = 1;
+        %scan.filen = filen;
+        transfer = gotorecentdir(transfer);
+
+        transfer = checknewline(transfer.filen, transfer);
+        assignin('base', 'transfertimer', transfer);
+    end
+
+
+
+
+
+    function scan = checknewline(file, scan)
+    [fid,~] = fopen(file);
+    if fid < 0
+        return
+    end
+
+    if scan.fidPos ~= -1
+        fseek(fid,scan.fidPos,'bof');  % move fid to end of the last stored scan
+        fgetl(fid);      % skip the currentline (head of the last stored scan);
+    end
+    
+    Trial = 0;
+    while feof(fid) == 0
+        tempfid = ftell(fid);
+        scanline = fgetl(fid);
+        %[fl, ~] = sscanf(scanline, 'scp', 1);
+        if ~isempty(scanline)
+            rtn = runcmd(scanline);
+            disp(scanline)
+            if rtn ==0
+                scan.fidPos = tempfid;
+                 Trial = 0;
+%             else
+%                 pause(1)
+%                 Trial = Trial + 1;
+%                 if Trial == 10
+%                     scan.fidPos = tempfid;
+%                     disp('10 times tried.. but nothing..')
+%                     Trial = 0;
+%                 end
+            else
+                scan.fidPos = tempfid;
+                fprintf('Failed ... %s\n', scanline);
+            end
+        end
+    end
+    fclose(fid);
+    end
+
+    function tm = gotorecentdir(tm)
+        % --- go to the stored directory; 
+        currentspec12ID = '~/.currentspecdatafile';
+        fid = fopen(currentspec12ID);
+        if fid < 0
+            error('~/.currentspecdatafile is not existing')
+            return
+        end
+        while 1
+            tline = fgetl(fid);
+            if ~ischar(tline)
+                break
+            else
+                specfilename = tline;
+            end
+        end
+        fclose(fid);
+        filepath = fileparts(specfilename);
+        %filename = [filen,filee];
+        crdir = pwd;
+        if ~strcmp(crdir, filepath)
+            eval(sprintf('cd %s', filepath));
+            disp(sprintf('User Directory is changed to: %s', filepath))
+            tm.fidPos = -1;
+        end
+        
+        fnpath = fullfile(filepath, 'SAXS', 'Averaged');
+        if ~isdir(fnpath)
+            eval(sprintf('mkdir %s', fnpath));
+        end
+        
+        fnpath = fullfile(filepath, 'WAXS', 'Averaged');
+        if ~isdir(fnpath)
+            eval(sprintf('mkdir %s', fnpath));
+        end
+       
+        setupnotloaded = evalin('base', 'setupnotloaded');
+
+        if setupnotloaded == 1
+            try
+                eval(sprintf('load %s/SAXS/saxssetup.mat', filepath));
+                eval(sprintf('load %s/WAXS/waxssetup.mat', filepath));
+                setupnotloaded = 0;
+                tm.setupnotloaded = 0;
+                assignin('base', 'setupnotloaded', setupnotloaded)
+            catch
+                disp('saxssetup.mat and waxssetup.mat are not loaded')
+                disp('As soon as you make those file, they will be loaded')
+                setupnotloaded = 1;
+                tm.setupnotloaded = 1;
+                assignin('base', 'setupnotloaded', setupnotloaded)
+            end
+        end
+
+    end
+
+
+    function autoaverage(datadir, datafilen, savefilen, logfilen)
+        %setupfile = fullfile(datadir, 'setup.mat');
+        %setupinfo = load(setupfile);
+        [phd, ic1, eng]=parseMetafile(logfilen);
+%         [phd, ic1, eng]
+        % phd = 1.0;
+        %eng0=eng;
+        sImg=imgUpsideDn(double(imread(datafilen)));
+        try
+            if strcmpi(datadir(end-3:end), 'saxs')
+                saxs = evalin('base', 'saxs');
+                eng0=saxs.eng;
+                data = circavgnew2(sImg, saxs.mask, saxs.qCMap, saxs.qRMap, saxs.qArray, saxs.offset, saxs.limits);
+            else
+                waxs = evalin('base', 'waxs');
+                eng0=waxs.eng;	
+                data = circavgnew2(sImg, waxs.mask, waxs.qCMap, waxs.qRMap, waxs.qArray, waxs.offset, waxs.limits);
+            end
+            %dataNorm=[data(:,1) data(:,2:3)/phd data(:,4:end)];
+            if eng>0
+                dataNorm=[data(:,1)*eng/eng0  data(:,2:3)/phd data(:,4:end)];
+            else
+              dataNorm=[data(:,1) data(:,2:3)/phd data(:,4:end)];
+            end
+            dlmwrite(savefilen,dataNorm,'delimiter','\t','precision','%.6f');
+        catch
+            
+        end
+    end
+
+    function a = runcmd(cmd)
+
+        [a,~] = system(cmd);
+
+        %return;
+        
+        %pause(1);
+        
+        % preparing average....
+        sp = strfind(cmd, ' ');
+        [p,fn,fe] = fileparts(cmd(sp(1):sp(2)-1));
+        
+        filen = [fn, fe];
+        np = cmd(sp(2)+1:end);
+       
+        savefilen = [fn, '.dat'];
+
+        absfilen = fullfile(np, filen);
+        absfilenAveraged = fullfile(np, 'Averaged', savefilen);
+        fileisnotthere = 1;
+        timeout = 50;
+        fid = -1;
+        while(fileisnotthere)
+            fid = dir(absfilen);
+            pause(0.1)
+            if ~isempty(fid)
+                fileisnotthere = 0;
+                %fclose(fid);
+            else
+                timeout = timeout - 1;
+            end
+            if timeout <0
+                fileisnotthere = 0;
+            end
+        end
+        if ~isempty(fid)
+            autoaverage(np, absfilen, absfilenAveraged, extrLog(absfilen));
+        end
+    end
+
+    function rtn = extrLog(filen)
+        [p, fn, fe] = fileparts(filen);
+        rtn = [p(1:end-4), 'Log'];
+        rtn = fullfile(rtn, sprintf('L%s.meta', fn(2:end)));
+    end
+end
+
+%function extractfilename(lineread)

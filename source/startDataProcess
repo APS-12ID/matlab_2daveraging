@@ -1,0 +1,23 @@
+#!/bin/bash
+
+gnome-terminal --quiet --tab --title="Eiger9M_dist" -- $SHELL -c "matlab -nodisplay -r "SAXS_grape_distr_eiger9m"; exec $SHELL"
+sleep 2
+gnome-terminal --quiet --tab --title="Platus300_dist" -- $SHELL -c "matlab -nodisplay -r "SAXS_grape_distr_pilatus300k"; exec $SHELL"
+sleep 2
+
+gnome-terminal --quiet --tab --title="Platus2M_dist" -- $SHELL -c "matlab -nodisplay -r "SAXS_grape_distr_pilatus2m"; exec $SHELL"
+sleep 2
+
+gnome-terminal --quiet --tab --title="Eiger9M_1" -- $SHELL -c "matlab -nodisplay -r "SAXS_grape_server_12idb"; exec $SHELL"
+sleep 2
+gnome-terminal --quiet --tab --title="Eiger9M_2" -- $SHELL -c "matlab -nodisplay -r "SAXS_grape_server_12idb"; exec $SHELL"
+sleep 2
+gnome-terminal --quiet --tab --title="Pilatus300_1" -- $SHELL -c "matlab -nodisplay -r "SAXS_grape_server_12idb"; exec $SHELL"
+sleep 2
+gnome-terminal --quiet --tab --title="Pilatus300_2" -- $SHELL -c "matlab -nodisplay -r "SAXS_grape_server_12idb"; exec $SHELL"
+
+
+gnome-terminal --quiet --tab --title="Pilatus2M_1" -- $SHELL -c "matlab -nodisplay -r "SAXS_grape_server_12idc"; exec $SHELL"
+sleep 2
+gnome-terminal --quiet --tab --title="Pilatus2M_2" -- $SHELL -c "matlab -nodisplay -r "SAXS_grape_server_12idc"; exec $SHELL"
+sleep 2
